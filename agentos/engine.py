@@ -55,7 +55,7 @@ class ComplianceEngine:
             else:
                 support = self.verifier.verify(claim, permitted_evidence)
 
-            groundedness_score = self.judge.score_groundedness(support, permitted_evidence)
+            groundedness_score = self.judge.score_groundedness(claim, support, permitted_evidence)
             self.evidence_graph.record_support(support)
             self.observability.record("claim_verified",
                                       {"claim_id": claim.id, "score": groundedness_score})
