@@ -17,6 +17,7 @@ from agentos.ingestion.chunker import Chunker
 from agentos.ingestion.extraction import PlainTextExtractor
 from agentos.ingestion.ingestor import DocumentIngestor
 from agentos.knowledge.evidence_graph import EvidenceGraph
+from agentos.knowledge.retrieval import GraphRAGRetriever
 from agentos.security.classification import SensitivityClassifier
 from agentos.security.encryption import EncryptionService
 from agentos.security.policy import PolicyGuard
@@ -78,14 +79,17 @@ def build_engine() -> ComplianceEngine:
     policy = PolicyGuard()
     store = SecureEvidenceStore(encryption, policy)
     classifier = SensitivityClassifier()
+    evidence_graph = EvidenceGraph()
+    retriever = GraphRAGRetriever(evidence_graph)
     return ComplianceEngine(
-        ingestor=DocumentIngestor(classifier, Chunker(), PlainTextExtractor(), store, tools),
+        ingestor=DocumentIngestor(classifier, Chunker(), PlainTextExtractor(),
+                                  store, evidence_graph, tools),
         planner=Planner("planner", models, tools),
-        retriever=RetrieverAgent("retriever", models, tools),
+        retriever=RetrieverAgent("retriever", models, tools, retriever),
         verifier=VerifierAgent("verifier", models, tools),
         sandbox=SandboxExecutorAgent("sandbox", models, tools),
         judge=JudgeAgent("judge", models, tools),
-        evidence_graph=EvidenceGraph(),
+        evidence_graph=evidence_graph,
         store=store,
         policy=policy,
         observability=Observability(),
@@ -106,4 +110,5 @@ if __name__ == "__main__":
     print(f"Report {report.question_id} - {len(report.findings)} findings:")
     for finding in report.findings:
         print(f"  {finding.requirement_id}: {finding.verdict.value} "
-              f"(score={finding.groundedness_score}, escalated={finding.escalated_to_human})")
+              f"(score={finding.groundedness_score}, spans={len(finding.supporting_span_ids)}, "
+              f"escalated={finding.escalated_to_human})")
