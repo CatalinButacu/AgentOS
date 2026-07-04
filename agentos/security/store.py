@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from agentos.domain.sources import EvidenceSpan
+from agentos.identity.principal import Principal
 from agentos.ingestion.dedup import ContentDeduper
 from agentos.security.encryption import EncryptionService
 from agentos.security.policy import PolicyGuard
@@ -24,13 +25,14 @@ class SecureEvidenceStore:
                 span.text, span.metadata.sensitivity)
         self.span_by_id[span.id] = replace(span, text="")
 
-    def get_permitted(self, span_ids: list[str], requester_role: str) -> list[EvidenceSpan]:
+    def get_permitted(self, span_ids: list[str], principal: Principal) -> list[EvidenceSpan]:
         permitted: list[EvidenceSpan] = []
         for span_id in span_ids:
             stored = self.span_by_id.get(span_id)
             if stored is None:
                 continue
-            if not self.policy.may_access(stored.metadata.sensitivity, requester_role):
+            if not self.policy.may_access(principal, stored.metadata.sensitivity,
+                                          stored.metadata.tenant_id):
                 continue
             plaintext = self.encryption.decrypt(self.ciphertext_by_hash[stored.metadata.content_hash])
             permitted.append(replace(stored, text=plaintext))

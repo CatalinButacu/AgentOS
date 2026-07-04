@@ -10,6 +10,8 @@ from agentos.agents.verifier import VerifierAgent
 from agentos.domain.compliance import (ComplianceQuestion, ComplianceReport,
                                        Finding, Requirement)
 from agentos.domain.sources import Source, SourceKind
+from agentos.identity.principal import Principal
+from agentos.identity.roles import Role
 from agentos.infra.model_router import ModelRouter
 from agentos.infra.observability import Observability
 from agentos.infra.tool_gateway import ToolGateway
@@ -41,14 +43,14 @@ class ComplianceEngine:
         self.policy = policy
         self.observability = observability
 
-    def run(self, question: ComplianceQuestion, requester_role: str) -> ComplianceReport:
+    def run(self, question: ComplianceQuestion, principal: Principal) -> ComplianceReport:
         for source in question.sources:
             self.ingestor.ingest(source)
 
         findings: list[Finding] = []
         for claim in self.planner.decompose(question):
             candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=2000)
-            permitted_evidence = self.store.get_permitted(candidate_span_ids, requester_role)
+            permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
 
             if claim.is_executable:
                 support = self.sandbox.execute_for_ground_truth(claim)
@@ -106,7 +108,8 @@ if __name__ == "__main__":
         ],
         sources=[Source("s1", SourceKind.PLAIN_TEXT, "samples/data_retention_policy.md")],
     )
-    report = build_engine().run(question, requester_role="auditor")
+    principal = Principal("u.owner", {Role.OWNER})
+    report = build_engine().run(question, principal)
     print(f"Report {report.question_id} - {len(report.findings)} findings:")
     for finding in report.findings:
         print(f"  {finding.requirement_id}: {finding.verdict.value} "
