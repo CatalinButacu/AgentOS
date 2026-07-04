@@ -43,6 +43,6 @@ class SecureEvidenceStore:
                                           stored.metadata.tenant_id):
                 continue
             ciphertext = self.backend.get(_CIPHERTEXT, stored.metadata.content_hash)
-            plaintext = self.encryption.decrypt(ciphertext)
+            plaintext = self.encryption.decrypt(ciphertext, stored.metadata.sensitivity)
             permitted.append(replace(stored, text=plaintext))
         return permitted
