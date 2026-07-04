@@ -1,3 +1,4 @@
+import pickle
 from dataclasses import replace
 
 from agentos.domain.sources import Sensitivity
@@ -39,7 +40,8 @@ def test_store_encrypts_and_gates_by_role():
     span = Chunker().chunk("doc.s", "s", "1", "Personal data here.")[0]
     confidential = replace(span, metadata=replace(span.metadata, sensitivity=Sensitivity.CONFIDENTIAL))
     store.put(confidential)
-    assert store.span_by_id[confidential.id].text == ""
+    stored = pickle.loads(store.backend.get("spans", confidential.id))
+    assert stored.text == ""
     owner = store.get_permitted([confidential.id], Principal("o", {Role.OWNER}))
     clerk = store.get_permitted([confidential.id], Principal("c", {Role.CLERK}))
     assert owner and owner[0].text == "Personal data here."

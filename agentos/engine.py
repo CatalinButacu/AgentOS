@@ -50,7 +50,8 @@ class ComplianceEngine:
                  sandbox: SandboxExecutorAgent, judge: JudgeAgent,
                  evidence_graph: EvidenceGraph, store: SecureEvidenceStore,
                  policy: PolicyGuard, observability: Observability,
-                 human_decider: Callable[[dict], dict] | None = None) -> None:
+                 human_decider: Callable[[dict], dict] | None = None,
+                 backend=None) -> None:
         self.ingestor = ingestor
         self.planner = planner
         self.retriever = retriever
@@ -62,6 +63,9 @@ class ComplianceEngine:
         self.policy = policy
         self.observability = observability
         self.human_decider = human_decider
+        self.backend = backend
+        if backend is not None:
+            self.evidence_graph.load(backend)
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -87,6 +91,8 @@ class ComplianceEngine:
         for source in state["question"].sources:
             with self.observability.span("ingest.document", source_id=source.id):
                 self.ingestor.ingest(source)
+        if self.backend is not None:
+            self.evidence_graph.save(self.backend)
         return {}
 
     def _plan_node(self, state: ComplianceState) -> dict:
@@ -171,12 +177,13 @@ class ComplianceEngine:
 
 
 def build_engine(retriever_factory=None,
-                 human_decider: Callable[[dict], dict] | None = None) -> ComplianceEngine:
+                 human_decider: Callable[[dict], dict] | None = None,
+                 backend=None) -> ComplianceEngine:
     models = ModelRouter()
     tools = ToolGateway()
     encryption = EncryptionService()
     policy = PolicyGuard()
-    store = SecureEvidenceStore(encryption, policy)
+    store = SecureEvidenceStore(encryption, policy, backend=backend)
     classifier = SensitivityClassifier()
     evidence_graph = EvidenceGraph()
     retriever = (retriever_factory or GraphRAGRetriever)(evidence_graph)
@@ -193,6 +200,7 @@ def build_engine(retriever_factory=None,
         policy=policy,
         observability=Observability(),
         human_decider=human_decider,
+        backend=backend,
     )
 
 

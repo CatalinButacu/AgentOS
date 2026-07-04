@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import math
+import pickle
 
 from agentos.domain.compliance import SupportLink
 from agentos.domain.graph import GraphEdge, GraphNode
 from agentos.domain.sources import EvidenceSpan
 from agentos.knowledge.lexical import tokenize
+from agentos.persistence.kv import KeyValueStore
+
+_GRAPH = "graph"
+_STATE = "state"
 
 
 class EvidenceGraph:
@@ -81,3 +86,29 @@ class EvidenceGraph:
 
     def record_support(self, support: SupportLink) -> None:
         self.support_links.append(support)
+
+    def save(self, backend: KeyValueStore) -> None:
+        state = {
+            "nodes_by_id": self.nodes_by_id,
+            "edges": self.edges,
+            "postings": self.postings,
+            "token_estimate_by_id": self.token_estimate_by_id,
+            "parent_by_id": self.parent_by_id,
+            "embedding_by_id": self.embedding_by_id,
+            "span_ids": self.span_ids,
+        }
+        backend.put(_GRAPH, _STATE, pickle.dumps(state))
+
+    def load(self, backend: KeyValueStore) -> bool:
+        raw = backend.get(_GRAPH, _STATE)
+        if raw is None:
+            return False
+        state = pickle.loads(raw)
+        self.nodes_by_id = state["nodes_by_id"]
+        self.edges = state["edges"]
+        self.postings = state["postings"]
+        self.token_estimate_by_id = state["token_estimate_by_id"]
+        self.parent_by_id = state["parent_by_id"]
+        self.embedding_by_id = state["embedding_by_id"]
+        self.span_ids = state["span_ids"]
+        return True
