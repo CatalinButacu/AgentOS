@@ -45,35 +45,51 @@ class ComplianceEngine:
         self.observability = observability
 
     def run(self, question: ComplianceQuestion, principal: Principal) -> ComplianceReport:
-        for source in question.sources:
-            self.ingestor.ingest(source)
+        with self.observability.span("compliance.run", question_id=question.id,
+                                     principal=principal.id) as run_span:
+            for source in question.sources:
+                with self.observability.span("ingest.document", source_id=source.id):
+                    self.ingestor.ingest(source)
 
-        findings: list[Finding] = []
-        for claim in self.planner.decompose(question):
-            candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=2000)
-            permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
+            findings: list[Finding] = []
+            for claim in self.planner.decompose(question):
+                with self.observability.span("assess.claim", claim_id=claim.id,
+                                             executable=claim.is_executable) as claim_span:
+                    findings.append(self._assess(claim, principal, claim_span))
 
-            if claim.is_executable:
-                support = self.sandbox.execute_for_ground_truth(claim, permitted_evidence)
-                groundedness_score = support.groundedness_score
-            else:
-                support = self.verifier.verify(claim, permitted_evidence)
-                groundedness_score = self.judge.score_groundedness(claim, support, permitted_evidence)
+            run_span.set("findings", len(findings))
+            return ComplianceReport(question.id, findings, generated_at=datetime.now())
 
-            self.evidence_graph.record_support(support)
-            self.observability.record("claim_verified",
-                                      {"claim_id": claim.id, "score": groundedness_score})
+    def _assess(self, claim, principal, claim_span) -> Finding:
+        candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=2000)
+        permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
 
-            findings.append(Finding(
-                requirement_id=claim.requirement_id,
-                claim_id=claim.id,
-                verdict=support.verdict,
-                groundedness_score=groundedness_score,
-                supporting_span_ids=support.evidence_span_ids,
-                escalated_to_human=self.policy.requires_human_review(groundedness_score),
-            ))
+        if claim.is_executable:
+            support = self.sandbox.execute_for_ground_truth(claim, permitted_evidence)
+            groundedness_score = support.groundedness_score
+        else:
+            support = self.verifier.verify(claim, permitted_evidence)
+            groundedness_score = self.judge.score_groundedness(claim, support, permitted_evidence)
 
-        return ComplianceReport(question.id, findings, generated_at=datetime.now())
+        evidence_tokens = sum(len(span.text.split()) for span in permitted_evidence)
+        escalated = self.policy.requires_human_review(groundedness_score)
+
+        claim_span.set("retrieved", len(candidate_span_ids))
+        claim_span.set("permitted", len(permitted_evidence))
+        claim_span.set("evidence.tokens", evidence_tokens)
+        claim_span.set("verdict", support.verdict.value)
+        claim_span.set("groundedness", groundedness_score)
+        claim_span.set("escalated", escalated)
+
+        self.evidence_graph.record_support(support)
+        return Finding(
+            requirement_id=claim.requirement_id,
+            claim_id=claim.id,
+            verdict=support.verdict,
+            groundedness_score=groundedness_score,
+            supporting_span_ids=support.evidence_span_ids,
+            escalated_to_human=escalated,
+        )
 
 
 def build_engine() -> ComplianceEngine:
@@ -112,9 +128,14 @@ if __name__ == "__main__":
         sources=[Source("s1", SourceKind.PLAIN_TEXT, "samples/data_retention_policy.md")],
     )
     principal = Principal("u.owner", {Role.OWNER})
-    report = build_engine().run(question, principal)
+    engine = build_engine()
+    report = engine.run(question, principal)
     print(f"Report {report.question_id} - {len(report.findings)} findings:")
     for finding in report.findings:
         print(f"  {finding.requirement_id}: {finding.verdict.value} "
               f"(score={finding.groundedness_score}, spans={len(finding.supporting_span_ids)}, "
               f"escalated={finding.escalated_to_human})")
+    telemetry = engine.observability
+    print(f"telemetry: spans={len(telemetry.spans)} "
+          f"run_ms={telemetry.duration_of('compliance.run')} "
+          f"evidence_tokens={int(telemetry.sum_attribute('evidence.tokens'))}")
