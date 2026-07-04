@@ -14,10 +14,25 @@ class Verdict(Enum):
     ESCALATED_TO_HUMAN = "escalated_to_human"
 
 
+class CheckOperator(Enum):
+    AT_MOST = "at_most"
+    AT_LEAST = "at_least"
+    EQUALS = "equals"
+
+
+@dataclass
+class ExecutableCheck:
+    metric: str
+    unit: str
+    operator: CheckOperator
+    threshold: float
+
+
 @dataclass
 class Requirement:
     id: str
     text: str
+    check: ExecutableCheck | None = None
 
 
 @dataclass
@@ -34,6 +49,7 @@ class Claim:
     requirement_id: str
     text: str
     is_executable: bool = False
+    check: ExecutableCheck | None = None
 
 
 @dataclass

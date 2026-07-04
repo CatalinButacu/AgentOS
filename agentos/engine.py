@@ -7,7 +7,8 @@ from agentos.agents.planner import Planner
 from agentos.agents.retriever import RetrieverAgent
 from agentos.agents.sandbox import SandboxExecutorAgent
 from agentos.agents.verifier import VerifierAgent
-from agentos.domain.compliance import (ComplianceQuestion, ComplianceReport,
+from agentos.domain.compliance import (CheckOperator, ComplianceQuestion,
+                                       ComplianceReport, ExecutableCheck,
                                        Finding, Requirement)
 from agentos.domain.sources import Source, SourceKind
 from agentos.identity.principal import Principal
@@ -53,11 +54,12 @@ class ComplianceEngine:
             permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
 
             if claim.is_executable:
-                support = self.sandbox.execute_for_ground_truth(claim)
+                support = self.sandbox.execute_for_ground_truth(claim, permitted_evidence)
+                groundedness_score = support.groundedness_score
             else:
                 support = self.verifier.verify(claim, permitted_evidence)
+                groundedness_score = self.judge.score_groundedness(claim, support, permitted_evidence)
 
-            groundedness_score = self.judge.score_groundedness(claim, support, permitted_evidence)
             self.evidence_graph.record_support(support)
             self.observability.record("claim_verified",
                                       {"claim_id": claim.id, "score": groundedness_score})
@@ -103,7 +105,8 @@ if __name__ == "__main__":
         id="q1",
         text="Does the policy document satisfy data-retention rules?",
         requirements=[
-            Requirement("r1", "Personal data is retained no longer than 24 months."),
+            Requirement("r1", "Personal data is retained no longer than 24 months.",
+                        ExecutableCheck("retention period", "months", CheckOperator.AT_MOST, 24)),
             Requirement("r2", "Data deletion requests are honored within 30 days."),
         ],
         sources=[Source("s1", SourceKind.PLAIN_TEXT, "samples/data_retention_policy.md")],
