@@ -6,12 +6,10 @@ from datetime import datetime, timezone
 
 from agentos.domain.sources import (ElementType, EvidenceSpan, Sensitivity,
                                      SpanMetadata)
+from agentos.ingestion.extraction import ExtractedElement, structural_elements
 
 CHUNKER_NAME = "structural"
 CHUNKER_VERSION = "1"
-
-_HEADING_PATTERN = re.compile(r"^\s{0,3}(#{1,6})\s+(.*\S)\s*$")
-_PARAGRAPH_SEPARATOR = re.compile(r"\n\s*\n")
 
 
 def content_hash(text: str) -> str:
@@ -28,30 +26,33 @@ class Chunker:
               text: str, extraction_method: str = "plain_text",
               default_sensitivity: Sensitivity = Sensitivity.INTERNAL,
               observed_at: datetime | None = None) -> list[EvidenceSpan]:
+        return self.chunk_elements(document_id, source_id, document_version,
+                                   structural_elements(text),
+                                   extraction_method=extraction_method,
+                                   default_sensitivity=default_sensitivity,
+                                   observed_at=observed_at)
+
+    def chunk_elements(self, document_id: str, source_id: str, document_version: str,
+                       elements: list[ExtractedElement],
+                       extraction_method: str = "plain_text",
+                       default_sensitivity: Sensitivity = Sensitivity.INTERNAL,
+                       observed_at: datetime | None = None) -> list[EvidenceSpan]:
         observed_at = observed_at or datetime.now(timezone.utc)
         spans: list[EvidenceSpan] = []
         section_path: list[str] = []
         current_section_id: str | None = None
         ordinal = 0
-        cursor = 0
 
-        for block in _PARAGRAPH_SEPARATOR.split(text):
-            stripped = block.strip()
-            block_start = text.find(block, cursor)
-            cursor = block_start + len(block)
+        for element in elements:
+            stripped = element.text.strip()
             if not stripped:
                 continue
-
-            heading = _HEADING_PATTERN.match(stripped)
-            if heading:
-                depth = len(heading.group(1))
-                title = heading.group(2)
-                section_path = section_path[: depth - 1] + [title]
-                element_type = ElementType.HEADING
+            is_heading = element.element_type == ElementType.HEADING and bool(element.heading_level)
+            if is_heading:
+                section_path = section_path[: element.heading_level - 1] + [stripped]
                 zoom_level = 1
                 parent_id = None
             else:
-                element_type = ElementType.PARAGRAPH
                 zoom_level = 2
                 parent_id = current_section_id
 
@@ -65,19 +66,21 @@ class Chunker:
                 extraction_method=extraction_method,
                 chunker_name=self.name,
                 chunker_version=self.version,
-                element_type=element_type,
+                element_type=element.element_type,
                 ordinal=ordinal,
                 zoom_level=zoom_level,
-                char_start=block_start,
-                char_end=cursor,
+                char_start=element.char_start,
+                char_end=element.char_end,
                 observed_at=observed_at,
                 sensitivity=default_sensitivity,
                 section_path=list(section_path),
                 parent_id=parent_id,
+                page_number=element.page_number,
+                bounding_box=element.bounding_box,
             )
             spans.append(EvidenceSpan(id=span_id, text=stripped, metadata=metadata))
 
-            if heading:
+            if is_heading:
                 current_section_id = span_id
             ordinal += 1
 
@@ -95,7 +98,6 @@ Data deletion requests are honored within 30 days.
 """
     for span in Chunker().chunk("doc.s1", "s1", "1", sample):
         meta = span.metadata
-        location = "/".join(meta.section_path)
         print(f"[{meta.element_type.value} L{meta.zoom_level} #{meta.ordinal}] "
-              f"parent={meta.parent_id} hash={meta.content_hash[:8]} "
-              f"{location} :: {span.text[:60]}")
+              f"parent={meta.parent_id} page={meta.page_number} "
+              f"{'/'.join(meta.section_path)} :: {span.text[:60]}")

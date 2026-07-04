@@ -14,6 +14,7 @@ from agentos.infra.model_router import ModelRouter
 from agentos.infra.observability import Observability
 from agentos.infra.tool_gateway import ToolGateway
 from agentos.ingestion.chunker import Chunker
+from agentos.ingestion.extraction import PlainTextExtractor
 from agentos.ingestion.ingestor import DocumentIngestor
 from agentos.knowledge.evidence_graph import EvidenceGraph
 from agentos.security.classification import SensitivityClassifier
@@ -78,7 +79,7 @@ def build_engine() -> ComplianceEngine:
     store = SecureEvidenceStore(encryption, policy)
     classifier = SensitivityClassifier()
     return ComplianceEngine(
-        ingestor=DocumentIngestor(classifier, Chunker(), store, tools),
+        ingestor=DocumentIngestor(classifier, Chunker(), PlainTextExtractor(), store, tools),
         planner=Planner("planner", models, tools),
         retriever=RetrieverAgent("retriever", models, tools),
         verifier=VerifierAgent("verifier", models, tools),
@@ -99,7 +100,7 @@ if __name__ == "__main__":
             Requirement("r1", "Personal data is retained no longer than 24 months."),
             Requirement("r2", "Data deletion requests are honored within 30 days."),
         ],
-        sources=[Source("s1", SourceKind.PDF, "file://policy.pdf")],
+        sources=[Source("s1", SourceKind.PLAIN_TEXT, "samples/data_retention_policy.md")],
     )
     report = build_engine().run(question, requester_role="auditor")
     print(f"Report {report.question_id} - {len(report.findings)} findings:")
