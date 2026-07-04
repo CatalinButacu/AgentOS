@@ -1,0 +1,40 @@
+#!/bin/sh
+blocked=0
+
+for path in $(git diff --cached --name-only --diff-filter=ACM); do
+    case "$path" in
+        .env|*/.env|*.pem|*.key|*.pfx|*_rsa)
+            echo "pre-commit: refusing to commit secret file: $path"
+            blocked=1
+            ;;
+    esac
+done
+
+added=$(git diff --cached --diff-filter=ACM -U0 | grep '^+' | grep -v '^+++')
+
+if printf '%s\n' "$added" | grep -Eq 'BEGIN [A-Z ]*PRIVATE KEY'; then
+    echo "pre-commit: private key detected in staged changes"
+    blocked=1
+fi
+
+if printf '%s\n' "$added" | grep -Eq 'AKIA[0-9A-Z]{16}'; then
+    echo "pre-commit: AWS access key detected in staged changes"
+    blocked=1
+fi
+
+if printf '%s\n' "$added" | grep -Eq '(AccountKey|SharedAccessKey)=[A-Za-z0-9/+=]{20,}'; then
+    echo "pre-commit: storage or connection secret detected in staged changes"
+    blocked=1
+fi
+
+if printf '%s\n' "$added" | grep -Eiq '(AZURE_[A-Z_]*KEY|OPENAI_API_KEY|LANGFUSE_SECRET_KEY)[[:space:]]*=[[:space:]]*[^[:space:]#"'"'"']{12,}'; then
+    echo "pre-commit: credential assignment detected in staged changes"
+    blocked=1
+fi
+
+if [ "$blocked" -ne 0 ]; then
+    echo "pre-commit: commit aborted. Use environment variables or repository secrets."
+    exit 1
+fi
+
+exit 0

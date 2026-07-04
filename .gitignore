@@ -5,4 +5,10 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
+*.pem
+*.key
+*.pfx
+secrets.json
+*.db
 .DS_Store
