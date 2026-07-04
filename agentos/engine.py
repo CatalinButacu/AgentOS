@@ -136,7 +136,7 @@ class ComplianceEngine:
             return ComplianceReport(question.id, findings, generated_at=datetime.now())
 
 
-def build_engine() -> ComplianceEngine:
+def build_engine(retriever_factory=None) -> ComplianceEngine:
     models = ModelRouter()
     tools = ToolGateway()
     encryption = EncryptionService()
@@ -144,7 +144,7 @@ def build_engine() -> ComplianceEngine:
     store = SecureEvidenceStore(encryption, policy)
     classifier = SensitivityClassifier()
     evidence_graph = EvidenceGraph()
-    retriever = GraphRAGRetriever(evidence_graph)
+    retriever = (retriever_factory or GraphRAGRetriever)(evidence_graph)
     return ComplianceEngine(
         ingestor=DocumentIngestor(classifier, Chunker(), PlainTextExtractor(),
                                   store, evidence_graph, models, tools),

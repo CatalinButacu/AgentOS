@@ -44,3 +44,12 @@ class GraphRAGRetriever:
         if parent and self.graph.is_span(parent):
             ordered.append(parent)
         return ordered
+
+
+class FullContextRetriever:
+    def __init__(self, graph: EvidenceGraph) -> None:
+        self.graph = graph
+
+    def retrieve(self, query_text: str, token_budget: int,
+                 query_vector: list[float] | None = None) -> list[str]:
+        return list(self.graph.span_ids)
