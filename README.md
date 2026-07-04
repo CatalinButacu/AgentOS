@@ -45,6 +45,8 @@ identity/RBAC -> extract -> chunk -> dedup(Bloom) -> encrypt -> index+embed
 - **Reasoning** — a `VerifierAgent` (term coverage + Reflexion retry) for prose claims; a `SandboxExecutorAgent` (parse the value, evaluate the rule) for numeric claims; an independent `JudgeAgent` (entailment minus a contradiction penalty) that can overrule the verifier. Verifier and judge are separated by design (separation of duties).
 - **Observability** — OpenTelemetry-shaped spans with a `evidence.tokens` metric; optional `LangfuseExporter`.
 
+See [`docs/agentic-patterns.md`](docs/agentic-patterns.md) for how the recognized agentic patterns map to this code.
+
 ## Layout
 
 ```
