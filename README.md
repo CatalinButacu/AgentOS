@@ -78,6 +78,34 @@ uv pip install -r requirements.txt
 
 Only `engine.py` and `benchmark.py` need LangGraph; the individual modules are standard-library only.
 
+## API
+
+Run the HTTP service:
+
+```
+uv pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn agentos.api:app --reload
+```
+
+Check a document (auth via `X-API-Key`, default `dev-key`, override with `AGENTOS_API_KEY`):
+
+```
+curl -X POST http://localhost:8000/compliance/check ^
+  -H "X-API-Key: dev-key" -H "Content-Type: application/json" ^
+  -d "{\"question_id\":\"q\",\"requirements\":[{\"id\":\"r1\",\"text\":\"Personal data is retained no longer than 24 months.\"}],\"sources\":[{\"id\":\"s1\",\"kind\":\"plain_text\",\"uri\":\"samples/data_retention_policy.md\"}],\"principal\":{\"id\":\"o\",\"roles\":[\"owner\"]}}"
+```
+
+Set `AGENTOS_DB_PATH` to a file path to persist evidence across requests.
+
+## Deploy
+
+```
+docker build -t agentos .
+docker run -p 8000:8000 -e AGENTOS_API_KEY=change-me agentos
+```
+
+Tests run in CI on every push via `.github/workflows/ci.yml`.
+
 ## Going live on Azure
 
 Every external integration is behind an interface with an offline fallback. Set the environment variables and install the optional dependencies to activate them — no code changes.
