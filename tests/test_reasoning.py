@@ -8,6 +8,15 @@ from agentos.infra.tool_gateway import ToolGateway
 from agentos.ingestion.chunker import Chunker
 
 
+class _CannedModels(ModelRouter):
+    def __init__(self, response):
+        super().__init__(endpoint="endpoint", api_key="key")
+        self.response = response
+
+    def complete(self, prompt, difficulty="standard"):
+        return self.response
+
+
 def _agent_args():
     return ("agent", ModelRouter(), ToolGateway())
 
@@ -46,3 +55,29 @@ def test_sandbox_evaluates_numeric_rule():
                     ExecutableCheck("retention", "months", CheckOperator.AT_MOST, 12))
     assert sandbox.execute_for_ground_truth(passing, evidence).verdict == Verdict.SATISFIED
     assert sandbox.execute_for_ground_truth(failing, evidence).verdict == Verdict.NOT_SATISFIED
+
+
+def test_verifier_uses_llm_when_live():
+    evidence = _spans("Personal data retained for 24 months.")
+    span_id = evidence[0].id
+    models = _CannedModels(
+        f'{{"verdict": "satisfied", "supporting_span_ids": ["{span_id}"], "groundedness": 0.9}}')
+    verifier = VerifierAgent("verifier", models, ToolGateway())
+    support = verifier.verify(Claim("c", "r", "retention rule"), evidence)
+    assert support.verdict == Verdict.SATISFIED
+    assert support.groundedness_score == 0.9
+    assert span_id in support.evidence_span_ids
+
+
+def test_verifier_falls_back_on_bad_llm_output():
+    evidence = _spans("Personal data retained for 24 months.")
+    verifier = VerifierAgent("verifier", _CannedModels("not json at all"), ToolGateway())
+    support = verifier.verify(Claim("c", "r", "personal data retained months"), evidence)
+    assert support.verdict == Verdict.SATISFIED
+
+
+def test_judge_uses_llm_when_live():
+    evidence = _spans("Personal data retained for 24 months.")
+    support = SupportLink("c", [evidence[0].id], Verdict.SATISFIED, 1.0)
+    judge = JudgeAgent("judge", _CannedModels("0.42"), ToolGateway())
+    assert judge.score_groundedness(Claim("c", "r", "retention"), support, evidence) == 0.42
