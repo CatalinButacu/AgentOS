@@ -16,6 +16,7 @@ class EvidenceGraph:
         self.postings: dict[str, set[str]] = {}
         self.token_estimate_by_id: dict[str, int] = {}
         self.parent_by_id: dict[str, str] = {}
+        self.embedding_by_id: dict[str, list[float]] = {}
         self.span_ids: set[str] = set()
 
     def add_node(self, node: GraphNode) -> GraphNode:
@@ -31,7 +32,8 @@ class EvidenceGraph:
         if document_id not in self.nodes_by_id:
             self.add_node(GraphNode(id=document_id, kind="document", zoom_level=0, label=label))
 
-    def add_span(self, span: EvidenceSpan, document_id: str) -> None:
+    def add_span(self, span: EvidenceSpan, document_id: str,
+                 embedding: list[float] | None = None) -> None:
         meta = span.metadata
         label = "/".join(meta.section_path) or span.text[:60]
         self.add_node(GraphNode(id=span.id, kind=meta.element_type.value,
@@ -44,6 +46,8 @@ class EvidenceGraph:
         self.token_estimate_by_id[span.id] = max(1, len(span.text.split()))
         for term in set(tokenize(span.text)):
             self.postings.setdefault(term, set()).add(span.id)
+        if embedding is not None:
+            self.embedding_by_id[span.id] = embedding
 
     def search(self, query_terms: list[str]) -> dict[str, float]:
         total_spans = max(1, len(self.span_ids))
@@ -55,6 +59,15 @@ class EvidenceGraph:
             inverse_document_frequency = math.log(1 + total_spans / len(matches))
             for span_id in matches:
                 scores[span_id] = scores.get(span_id, 0.0) + inverse_document_frequency
+        return scores
+
+    def semantic_search(self, query_vector: list[float]) -> dict[str, float]:
+        query_norm = math.sqrt(sum(value * value for value in query_vector)) or 1.0
+        scores: dict[str, float] = {}
+        for span_id, vector in self.embedding_by_id.items():
+            vector_norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+            dot = sum(left * right for left, right in zip(query_vector, vector))
+            scores[span_id] = dot / (query_norm * vector_norm)
         return scores
 
     def parent_of(self, span_id: str) -> str | None:

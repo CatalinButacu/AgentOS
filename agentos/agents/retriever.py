@@ -14,4 +14,5 @@ class RetrieverAgent(Agent):
         self.retriever = retriever
 
     def gather_evidence(self, claim: Claim, token_budget: int) -> list[str]:
-        return self.retriever.retrieve(claim.text, token_budget)
+        query_vector = self.models.embed(claim.text)
+        return self.retriever.retrieve(claim.text, token_budget, query_vector)

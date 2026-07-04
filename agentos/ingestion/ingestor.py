@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from agentos.domain.sources import Document, Source
+from agentos.infra.model_router import ModelRouter
 from agentos.infra.tool_gateway import ToolGateway
 from agentos.ingestion.chunker import Chunker
 from agentos.ingestion.extraction import TextExtractor
@@ -14,12 +15,14 @@ from agentos.security.store import SecureEvidenceStore
 class DocumentIngestor:
     def __init__(self, classifier: SensitivityClassifier, chunker: Chunker,
                  extractor: TextExtractor, store: SecureEvidenceStore,
-                 graph: EvidenceGraph, tools: ToolGateway) -> None:
+                 graph: EvidenceGraph, embedder: ModelRouter,
+                 tools: ToolGateway) -> None:
         self.classifier = classifier
         self.chunker = chunker
         self.extractor = extractor
         self.store = store
         self.graph = graph
+        self.embedder = embedder
         self.tools = tools
 
     def ingest(self, source: Source) -> Document:
@@ -36,7 +39,8 @@ class DocumentIngestor:
                 span,
                 metadata=replace(span.metadata,
                                  sensitivity=self.classifier.classify(span.text)))
-            self.graph.add_span(classified, document_id)
+            embedding = self.embedder.embed(classified.text)
+            self.graph.add_span(classified, document_id, embedding)
             self.store.put(classified)
             stored_span_ids.append(classified.id)
         return Document(id=document_id, source=source,

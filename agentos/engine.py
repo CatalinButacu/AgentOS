@@ -146,7 +146,7 @@ def build_engine() -> ComplianceEngine:
     retriever = GraphRAGRetriever(evidence_graph)
     return ComplianceEngine(
         ingestor=DocumentIngestor(classifier, Chunker(), PlainTextExtractor(),
-                                  store, evidence_graph, tools),
+                                  store, evidence_graph, models, tools),
         planner=Planner("planner", models, tools),
         retriever=RetrieverAgent("retriever", models, tools, retriever),
         verifier=VerifierAgent("verifier", models, tools),
