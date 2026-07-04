@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from agentos.domain.sources import EvidenceSpan, Sensitivity
+from agentos.domain.sources import EvidenceSpan
 from agentos.security.encryption import EncryptionService
 from agentos.security.policy import PolicyGuard
 
@@ -15,17 +15,17 @@ class SecureEvidenceStore:
         self.metadata_by_id: dict[str, EvidenceSpan] = {}
 
     def put(self, span: EvidenceSpan) -> None:
-        self.ciphertext_by_id[span.id] = self.encryption.encrypt(span.text, span.sensitivity)
+        self.ciphertext_by_id[span.id] = self.encryption.encrypt(span.text, span.metadata.sensitivity)
         self.metadata_by_id[span.id] = replace(span, text="")
 
     def get_permitted(self, span_ids: list[str], requester_role: str) -> list[EvidenceSpan]:
         permitted: list[EvidenceSpan] = []
         for span_id in span_ids:
-            metadata = self.metadata_by_id.get(span_id)
-            if metadata is None:
+            stored = self.metadata_by_id.get(span_id)
+            if stored is None:
                 continue
-            if not self.policy.may_access(metadata.sensitivity, requester_role):
+            if not self.policy.may_access(stored.metadata.sensitivity, requester_role):
                 continue
             plaintext = self.encryption.decrypt(self.ciphertext_by_id[span_id])
-            permitted.append(replace(metadata, text=plaintext))
+            permitted.append(replace(stored, text=plaintext))
         return permitted

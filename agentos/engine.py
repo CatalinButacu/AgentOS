@@ -13,6 +13,7 @@ from agentos.domain.sources import Source, SourceKind
 from agentos.infra.model_router import ModelRouter
 from agentos.infra.observability import Observability
 from agentos.infra.tool_gateway import ToolGateway
+from agentos.ingestion.chunker import Chunker
 from agentos.ingestion.ingestor import DocumentIngestor
 from agentos.knowledge.evidence_graph import EvidenceGraph
 from agentos.security.classification import SensitivityClassifier
@@ -77,7 +78,7 @@ def build_engine() -> ComplianceEngine:
     store = SecureEvidenceStore(encryption, policy)
     classifier = SensitivityClassifier()
     return ComplianceEngine(
-        ingestor=DocumentIngestor(classifier, store, tools),
+        ingestor=DocumentIngestor(classifier, Chunker(), store, tools),
         planner=Planner("planner", models, tools),
         retriever=RetrieverAgent("retriever", models, tools),
         verifier=VerifierAgent("verifier", models, tools),
