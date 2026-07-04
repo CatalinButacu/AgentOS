@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import operator
+import uuid
+from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Callable, TypedDict
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
+from langgraph.types import Command, Send, interrupt
 
 from agentos.agents.judge import JudgeAgent
 from agentos.agents.planner import Planner
@@ -14,7 +17,7 @@ from agentos.agents.sandbox import SandboxExecutorAgent
 from agentos.agents.verifier import VerifierAgent
 from agentos.domain.compliance import (CheckOperator, Claim, ComplianceQuestion,
                                        ComplianceReport, ExecutableCheck,
-                                       Finding, Requirement)
+                                       Finding, Requirement, Verdict)
 from agentos.domain.sources import Source, SourceKind
 from agentos.identity.principal import Principal
 from agentos.identity.roles import Role
@@ -38,6 +41,7 @@ class ComplianceState(TypedDict):
     principal: Principal
     claims: list[Claim]
     findings: Annotated[list[Finding], operator.add]
+    reviewed_findings: list[Finding]
 
 
 class ComplianceEngine:
@@ -45,7 +49,8 @@ class ComplianceEngine:
                  retriever: RetrieverAgent, verifier: VerifierAgent,
                  sandbox: SandboxExecutorAgent, judge: JudgeAgent,
                  evidence_graph: EvidenceGraph, store: SecureEvidenceStore,
-                 policy: PolicyGuard, observability: Observability) -> None:
+                 policy: PolicyGuard, observability: Observability,
+                 human_decider: Callable[[dict], dict] | None = None) -> None:
         self.ingestor = ingestor
         self.planner = planner
         self.retriever = retriever
@@ -56,6 +61,7 @@ class ComplianceEngine:
         self.store = store
         self.policy = policy
         self.observability = observability
+        self.human_decider = human_decider
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -63,11 +69,14 @@ class ComplianceEngine:
         builder.add_node("ingest", self._ingest_node)
         builder.add_node("plan", self._plan_node)
         builder.add_node("assess", self._assess_node)
+        builder.add_node("review", self._review_node)
         builder.add_edge(START, "ingest")
         builder.add_edge("ingest", "plan")
         builder.add_conditional_edges("plan", self._fan_out_claims, ["assess"])
-        builder.add_edge("assess", END)
-        return builder.compile()
+        builder.add_edge("assess", "review")
+        builder.add_edge("review", END)
+        checkpointer = MemorySaver() if self.human_decider is not None else None
+        return builder.compile(checkpointer=checkpointer)
 
     def _fan_out_claims(self, state: ComplianceState) -> list[Send]:
         principal = state["principal"]
@@ -90,6 +99,23 @@ class ComplianceEngine:
                                      executable=claim.is_executable) as claim_span:
             finding = self._assess(claim, principal, claim_span)
         return {"findings": [finding]}
+
+    def _review_node(self, state: ComplianceState) -> dict:
+        findings = state["findings"]
+        escalated = [finding for finding in findings if finding.escalated_to_human]
+        if self.human_decider is None or not escalated:
+            return {"reviewed_findings": findings}
+        decisions = interrupt({"escalated": [finding.requirement_id for finding in escalated]})
+        self.observability.record("review.human", {"resolved": len(decisions)})
+        resolved: list[Finding] = []
+        for finding in findings:
+            decision = decisions.get(finding.requirement_id) if finding.escalated_to_human else None
+            if decision is not None:
+                resolved.append(replace(finding, verdict=Verdict(decision),
+                                        escalated_to_human=False))
+            else:
+                resolved.append(finding)
+        return {"reviewed_findings": resolved}
 
     def _assess(self, claim: Claim, principal: Principal, claim_span) -> Finding:
         candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=2000)
@@ -122,21 +148,30 @@ class ComplianceEngine:
             escalated_to_human=escalated,
         )
 
-    def run(self, question: ComplianceQuestion, principal: Principal) -> ComplianceReport:
+    def run(self, question: ComplianceQuestion, principal: Principal,
+            thread_id: str | None = None) -> ComplianceReport:
+        config = {"configurable": {"thread_id": thread_id or str(uuid.uuid4())}}
         with self.observability.span("compliance.run", question_id=question.id,
                                      principal=principal.id) as run_span:
-            result = self.graph.invoke({
+            state = self.graph.invoke({
                 "question": question,
                 "principal": principal,
                 "claims": [],
                 "findings": [],
-            })
-            findings = sorted(result["findings"], key=lambda finding: finding.requirement_id)
+                "reviewed_findings": [],
+            }, config)
+            while "__interrupt__" in state:
+                payload = state["__interrupt__"][0].value
+                decisions = self.human_decider(payload)
+                state = self.graph.invoke(Command(resume=decisions), config)
+            findings = sorted(state.get("reviewed_findings") or state["findings"],
+                              key=lambda finding: finding.requirement_id)
             run_span.set("findings", len(findings))
             return ComplianceReport(question.id, findings, generated_at=datetime.now())
 
 
-def build_engine(retriever_factory=None) -> ComplianceEngine:
+def build_engine(retriever_factory=None,
+                 human_decider: Callable[[dict], dict] | None = None) -> ComplianceEngine:
     models = ModelRouter()
     tools = ToolGateway()
     encryption = EncryptionService()
@@ -157,6 +192,7 @@ def build_engine(retriever_factory=None) -> ComplianceEngine:
         store=store,
         policy=policy,
         observability=Observability(),
+        human_decider=human_decider,
     )
 
 

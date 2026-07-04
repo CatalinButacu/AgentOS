@@ -32,3 +32,14 @@ def test_rbac_changes_outcome():
     owner = _verdicts(build_engine().run(_question(), Principal("o", {Role.OWNER})))
     assert clerk["r1"] != "satisfied"
     assert owner["r1"] == "satisfied"
+
+
+def test_human_in_the_loop_resolves_escalation():
+    def decider(payload):
+        return {requirement_id: "not_satisfied" for requirement_id in payload["escalated"]}
+
+    engine = build_engine(human_decider=decider)
+    report = engine.run(_question(), Principal("c", {Role.CLERK}))
+    r1 = next(finding for finding in report.findings if finding.requirement_id == "r1")
+    assert r1.escalated_to_human is False
+    assert r1.verdict.value == "not_satisfied"
