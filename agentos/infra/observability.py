@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -11,6 +12,8 @@ class Span:
     attributes: dict
     duration_ms: float
     status: str
+    started_at: datetime
+    ended_at: datetime
 
 
 class SpanRecorder:
@@ -32,6 +35,7 @@ class Observability:
     @contextmanager
     def span(self, name: str, **attributes):
         started = time.perf_counter()
+        started_at = datetime.now(timezone.utc)
         recorder = SpanRecorder(attributes)
         status = "ok"
         try:
@@ -41,7 +45,8 @@ class Observability:
             raise
         finally:
             duration_ms = round((time.perf_counter() - started) * 1000, 3)
-            completed = Span(name, recorder.attributes, duration_ms, status)
+            completed = Span(name, recorder.attributes, duration_ms, status,
+                             started_at, datetime.now(timezone.utc))
             self.spans.append(completed)
             if self.echo:
                 rendered = " ".join(f"{key}={value}" for key, value in completed.attributes.items())

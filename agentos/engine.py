@@ -18,6 +18,7 @@ from agentos.domain.compliance import (CheckOperator, Claim, ComplianceQuestion,
 from agentos.domain.sources import Source, SourceKind
 from agentos.identity.principal import Principal
 from agentos.identity.roles import Role
+from agentos.infra.langfuse_exporter import LangfuseExporter
 from agentos.infra.model_router import ModelRouter
 from agentos.infra.observability import Observability
 from agentos.infra.tool_gateway import ToolGateway
@@ -182,3 +183,5 @@ if __name__ == "__main__":
     print(f"telemetry: spans={len(telemetry.spans)} "
           f"run_ms={telemetry.duration_of('compliance.run')} "
           f"evidence_tokens={int(telemetry.sum_attribute('evidence.tokens'))}")
+    trace_id = LangfuseExporter.from_env().export(telemetry)
+    print(f"langfuse: {'trace ' + trace_id if trace_id else 'not configured (offline)'}")
