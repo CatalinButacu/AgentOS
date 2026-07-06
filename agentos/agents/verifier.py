@@ -14,6 +14,11 @@ _VERDICT_BY_VALUE = {verdict.value: verdict for verdict in Verdict}
 
 
 class VerifierAgent(Agent):
+    def __init__(self, name, models, tools,
+                 support_threshold: float = SUPPORT_THRESHOLD) -> None:
+        super().__init__(name, models, tools)
+        self.support_threshold = support_threshold
+
     def verify(self, claim: Claim, evidence: list[EvidenceSpan]) -> SupportLink:
         if self.models.is_live and evidence:
             llm_support = self._verify_with_llm(claim, evidence)
@@ -32,7 +37,7 @@ class VerifierAgent(Agent):
         if not claim_terms or not evidence:
             return SupportLink(claim.id, [], Verdict.INSUFFICIENT_EVIDENCE, 0.0)
         support = self._assess(claim.id, claim_terms, evidence, _strict_match)
-        if support.groundedness_score < SUPPORT_THRESHOLD:
+        if support.groundedness_score < self.support_threshold:
             support = self.reflect_and_retry(claim, support, evidence)
         return support
 
@@ -58,7 +63,7 @@ class VerifierAgent(Agent):
         if not supporting_span_ids:
             return SupportLink(claim_id, [], Verdict.INSUFFICIENT_EVIDENCE, 0.0)
         coverage = round(len(covered_terms) / len(claim_terms), 3)
-        verdict = Verdict.SATISFIED if coverage >= SUPPORT_THRESHOLD else Verdict.INSUFFICIENT_EVIDENCE
+        verdict = Verdict.SATISFIED if coverage >= self.support_threshold else Verdict.INSUFFICIENT_EVIDENCE
         return SupportLink(claim_id, supporting_span_ids, verdict, coverage)
 
 

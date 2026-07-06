@@ -12,6 +12,11 @@ _SCORE_PATTERN = re.compile(r"[-+]?\d*\.?\d+")
 
 
 class JudgeAgent(Agent):
+    def __init__(self, name, models, tools,
+                 contradiction_penalty: float = CONTRADICTION_PENALTY) -> None:
+        super().__init__(name, models, tools)
+        self.contradiction_penalty = contradiction_penalty
+
     def score_groundedness(self, claim: Claim, support: SupportLink,
                            evidence: list[EvidenceSpan]) -> float:
         cited = [span for span in evidence if span.id in set(support.evidence_span_ids)]
@@ -36,7 +41,7 @@ class JudgeAgent(Agent):
             evidence_terms |= set(tokenize(span.text))
         entailment = len(claim_terms & evidence_terms) / len(claim_terms)
         contradiction = has_negation(claim.text) != _any_negation(cited)
-        penalty = CONTRADICTION_PENALTY if contradiction else 0.0
+        penalty = self.contradiction_penalty if contradiction else 0.0
         return round(max(0.0, entailment - penalty), 3)
 
 

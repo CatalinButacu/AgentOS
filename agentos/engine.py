@@ -12,6 +12,7 @@ from langgraph.types import Command, Send, interrupt
 
 from agentos.agents.judge import JudgeAgent
 from agentos.agents.planner import Planner
+from agentos.config import ComplianceConfig
 from agentos.agents.retriever import RetrieverAgent
 from agentos.agents.sandbox import SandboxExecutorAgent
 from agentos.agents.verifier import VerifierAgent
@@ -19,6 +20,7 @@ from agentos.domain.compliance import (CheckOperator, Claim, ComplianceQuestion,
                                        ComplianceReport, ExecutableCheck,
                                        Finding, Requirement, Verdict)
 from agentos.domain.sources import Source, SourceKind
+from agentos.identity.access import AccessPolicy
 from agentos.identity.principal import Principal
 from agentos.identity.roles import Role
 from agentos.infra.langfuse_exporter import LangfuseExporter
@@ -51,7 +53,8 @@ class ComplianceEngine:
                  evidence_graph: EvidenceGraph, store: SecureEvidenceStore,
                  policy: PolicyGuard, observability: Observability,
                  human_decider: Callable[[dict], dict] | None = None,
-                 backend=None) -> None:
+                 backend=None, config: ComplianceConfig | None = None) -> None:
+        self.config = config or ComplianceConfig()
         self.ingestor = ingestor
         self.planner = planner
         self.retriever = retriever
@@ -124,7 +127,7 @@ class ComplianceEngine:
         return {"reviewed_findings": resolved}
 
     def _assess(self, claim: Claim, principal: Principal, claim_span) -> Finding:
-        candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=2000)
+        candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=self.config.token_budget)
         permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
 
         if claim.is_executable:
@@ -178,13 +181,16 @@ class ComplianceEngine:
 
 def build_engine(retriever_factory=None,
                  human_decider: Callable[[dict], dict] | None = None,
-                 backend=None) -> ComplianceEngine:
+                 backend=None,
+                 config: ComplianceConfig | None = None) -> ComplianceEngine:
+    config = config or ComplianceConfig()
     models = ModelRouter()
     tools = ToolGateway()
     encryption = EncryptionService()
-    policy = PolicyGuard()
+    access_policy = AccessPolicy(config.role_clearances, config.sensitivity_rank)
+    policy = PolicyGuard(access_policy, config.groundedness_threshold)
     store = SecureEvidenceStore(encryption, policy, backend=backend)
-    classifier = SensitivityClassifier()
+    classifier = SensitivityClassifier(config.sensitivity_rules, config.unclassified_sensitivity)
     evidence_graph = EvidenceGraph()
     retriever = (retriever_factory or GraphRAGRetriever)(evidence_graph)
     return ComplianceEngine(
@@ -192,15 +198,16 @@ def build_engine(retriever_factory=None,
                                   store, evidence_graph, models, tools),
         planner=Planner("planner", models, tools),
         retriever=RetrieverAgent("retriever", models, tools, retriever),
-        verifier=VerifierAgent("verifier", models, tools),
+        verifier=VerifierAgent("verifier", models, tools, config.support_threshold),
         sandbox=SandboxExecutorAgent("sandbox", models, tools),
-        judge=JudgeAgent("judge", models, tools),
+        judge=JudgeAgent("judge", models, tools, config.contradiction_penalty),
         evidence_graph=evidence_graph,
         store=store,
         policy=policy,
         observability=Observability(),
         human_decider=human_decider,
         backend=backend,
+        config=config,
     )
 
 

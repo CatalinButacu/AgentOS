@@ -7,8 +7,9 @@ SEMANTIC_RECALL = 5
 
 
 class GraphRAGRetriever:
-    def __init__(self, graph: EvidenceGraph) -> None:
+    def __init__(self, graph: EvidenceGraph, semantic_recall: int = SEMANTIC_RECALL) -> None:
         self.graph = graph
+        self.semantic_recall = semantic_recall
 
     def retrieve(self, query_text: str, token_budget: int,
                  query_vector: list[float] | None = None) -> list[str]:
@@ -36,7 +37,7 @@ class GraphRAGRetriever:
                          query_vector: list[float]) -> list[str]:
         semantic = self.graph.semantic_search(query_vector)
         ranked = sorted(semantic, key=lambda span_id: semantic[span_id], reverse=True)
-        return [span_id for span_id in ranked if span_id not in lexical_scores][:SEMANTIC_RECALL]
+        return [span_id for span_id in ranked if span_id not in lexical_scores][:self.semantic_recall]
 
     def _seed_with_context(self, seed: str) -> list[str]:
         ordered = [seed]
