@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from agentos.domain.sources import Sensitivity
-from agentos.identity.roles import ROLE_CLEARANCE, SENSITIVITY_RANK, Role
+from agentos.identity.roles import ROLE_CLEARANCE, SENSITIVITY_RANK
 from agentos.security.classification import (DEFAULT_SENSITIVITY_RULES,
                                              SensitivityRule)
 
@@ -20,5 +20,5 @@ class ComplianceConfig:
     sensitivity_rules: Sequence[SensitivityRule] = DEFAULT_SENSITIVITY_RULES
     sensitivity_rank: Mapping[Sensitivity, int] = field(
         default_factory=lambda: dict(SENSITIVITY_RANK))
-    role_clearances: Mapping[Role, Sensitivity] = field(
+    role_clearances: Mapping[str, Sensitivity] = field(
         default_factory=lambda: dict(ROLE_CLEARANCE))

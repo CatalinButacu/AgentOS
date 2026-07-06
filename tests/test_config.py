@@ -49,6 +49,14 @@ def test_custom_clearances_change_access():
     assert generous.may_access(clerk, Sensitivity.CONFIDENTIAL)
 
 
+def test_arbitrary_string_roles_need_no_enum():
+    policy = AccessPolicy(clearances={"facility_manager": Sensitivity.RESTRICTED})
+    manager = Principal("u", {"facility_manager"})
+    stranger = Principal("s", {"visitor"})
+    assert policy.may_access(manager, Sensitivity.CONFIDENTIAL)
+    assert not policy.may_access(stranger, Sensitivity.CONFIDENTIAL)
+
+
 def test_config_changes_outcome_without_code_change():
     default_clerk = _verdicts(build_engine().run(_question(), Principal("c", {Role.CLERK})))
     generous = ComplianceConfig(role_clearances={Role.CLERK: Sensitivity.RESTRICTED})

@@ -5,7 +5,7 @@ from enum import Enum
 from agentos.domain.sources import Sensitivity
 
 
-class Role(Enum):
+class Role(str, Enum):
     CLERK = "clerk"
     TEAM_LEADER = "team_leader"
     MANAGER = "manager"

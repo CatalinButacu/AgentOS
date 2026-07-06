@@ -4,11 +4,11 @@ from collections.abc import Mapping
 
 from agentos.domain.sources import Sensitivity
 from agentos.identity.principal import Principal
-from agentos.identity.roles import ROLE_CLEARANCE, SENSITIVITY_RANK, Role
+from agentos.identity.roles import ROLE_CLEARANCE, SENSITIVITY_RANK
 
 
 class AccessPolicy:
-    def __init__(self, clearances: Mapping[Role, Sensitivity] | None = None,
+    def __init__(self, clearances: Mapping[str, Sensitivity] | None = None,
                  sensitivity_rank: Mapping[Sensitivity, int] | None = None) -> None:
         self.clearances = clearances if clearances is not None else ROLE_CLEARANCE
         self.sensitivity_rank = sensitivity_rank if sensitivity_rank is not None else SENSITIVITY_RANK
