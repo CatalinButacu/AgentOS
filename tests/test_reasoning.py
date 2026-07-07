@@ -1,4 +1,5 @@
 from agentos.agents.judge import JudgeAgent
+from agentos.agents.retriever import RetrieverAgent
 from agentos.agents.sandbox import SandboxExecutorAgent
 from agentos.agents.verifier import VerifierAgent
 from agentos.domain.compliance import (CheckOperator, Claim, ExecutableCheck,
@@ -111,3 +112,25 @@ def test_judge_uses_llm_when_live():
     support = SupportLink("c", [evidence[0].id], Verdict.SATISFIED, 1.0)
     judge = JudgeAgent("judge", _CannedModels("0.42"), ToolGateway())
     assert judge.score_groundedness(Claim("c", "r", "retention"), support, evidence) == 0.42
+
+
+def test_sandbox_routes_through_gateway_and_logs():
+    tools = ToolGateway()
+    sandbox = SandboxExecutorAgent("sandbox", ModelRouter(), tools)
+    evidence = _spans("Personal data is retained for 24 months.")
+    claim = Claim("c", "r", "retention", True,
+                  ExecutableCheck("retention", "months", CheckOperator.AT_MOST, 24))
+    assert sandbox.execute_for_ground_truth(claim, evidence).verdict == Verdict.SATISFIED
+    assert [call.name for call in tools.calls] == ["measure_metric"]
+
+
+def test_retriever_routes_through_gateway_and_logs():
+    tools = ToolGateway()
+
+    class _FakeRetriever:
+        def retrieve(self, query_text, token_budget, query_vector=None):
+            return ["span.1"]
+
+    agent = RetrieverAgent("retriever", ModelRouter(), tools, _FakeRetriever())
+    assert agent.gather_evidence(Claim("c", "r", "a claim about data"), token_budget=100) == ["span.1"]
+    assert [call.name for call in tools.calls] == ["retrieve_evidence"]
