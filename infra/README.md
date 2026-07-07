@@ -51,6 +51,23 @@ URL=$(az deployment group show -g agentos-rg -n main --query properties.outputs.
 curl "$URL/health"
 ```
 
+## Deploy via GitHub Actions (optional, manual)
+
+`.github/workflows/deploy.yml` builds and deploys the same way, but **only when you trigger it** — it is `workflow_dispatch` (manual) and never runs on push, so it can't deploy without your explicit action. It signs in with **OIDC** (no stored passwords) and runs `scripts/smoke.py` against the live app afterward.
+
+To enable it, configure a federated credential (an app registration or user-assigned identity with rights on `agentos-rg`) and add these **repository secrets**:
+
+- `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — for the OIDC login
+- `AGENTOS_API_KEY` — used by the post-deploy smoke test
+
+Then: **Actions → deploy → Run workflow**, and enter an image tag. Adjust `RESOURCE_GROUP` / `APP_NAME` at the top of the workflow if you renamed them.
+
+`scripts/smoke.py` also runs locally against any base URL:
+
+```bash
+SMOKE_BASE_URL=http://127.0.0.1:8000 SMOKE_API_KEY=dev-key python scripts/smoke.py
+```
+
 ## Notes
 
 - **Validate before deploying:** `az bicep build -f infra/main.bicep` compiles the template and catches API/version issues (model availability and OpenAI quota are region-specific).

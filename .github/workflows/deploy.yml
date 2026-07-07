@@ -1,0 +1,46 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to build and deploy
+        required: true
+        default: latest
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: agentos-rg
+  APP_NAME: agentos-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve ACR name
+        run: echo "ACR=$(az acr list -g "$RESOURCE_GROUP" --query '[0].name' -o tsv)" >> "$GITHUB_ENV"
+
+      - name: Build and push image in ACR
+        run: az acr build -r "$ACR" -t "agentos:${{ inputs.image_tag }}" .
+
+      - name: Deploy new revision
+        run: az containerapp update -g "$RESOURCE_GROUP" -n "$APP_NAME" --image "$ACR.azurecr.io/agentos:${{ inputs.image_tag }}"
+
+      - name: Post-deploy smoke test
+        env:
+          SMOKE_API_KEY: ${{ secrets.AGENTOS_API_KEY }}
+        run: |
+          FQDN=$(az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)
+          SMOKE_BASE_URL="https://$FQDN" python scripts/smoke.py
