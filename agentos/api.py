@@ -67,6 +67,7 @@ class FindingModel(BaseModel):
     groundedness_score: float
     supporting_span_ids: list[str]
     escalated_to_human: bool
+    tool_trace: list[dict] = []
 
 
 class ComplianceResponse(BaseModel):
@@ -145,6 +146,7 @@ def _to_response(report: ComplianceReport) -> ComplianceResponse:
             groundedness_score=finding.groundedness_score,
             supporting_span_ids=finding.supporting_span_ids,
             escalated_to_human=finding.escalated_to_human,
+            tool_trace=finding.tool_trace,
         ) for finding in report.findings])
 
 

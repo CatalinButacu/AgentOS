@@ -23,16 +23,20 @@ def measure_metric(unit: str, evidence: list[EvidenceSpan]) -> tuple[float, str]
 class SandboxExecutorAgent(Agent):
     def __init__(self, name, models, tools) -> None:
         super().__init__(name, models, tools)
-        tools.register(Tool("measure_metric",
-                            "Measure a numeric value in the given unit from evidence spans",
-                            measure_metric, ("unit", "evidence")))
+        self.register_tools(tools)
 
-    def execute_for_ground_truth(self, claim: Claim,
-                                 evidence: list[EvidenceSpan]) -> SupportLink:
+    def register_tools(self, gateway) -> None:
+        gateway.register(Tool("measure_metric",
+                              "Measure a numeric value in the given unit from evidence spans",
+                              measure_metric, ("unit", "evidence")))
+
+    def execute_for_ground_truth(self, claim: Claim, evidence: list[EvidenceSpan],
+                                 gateway=None) -> SupportLink:
+        gateway = gateway or self.tools
         check = claim.check
         if check is None or (check.operator in RANGE_OPERATORS and check.upper is None):
             return SupportLink(claim.id, [], Verdict.INSUFFICIENT_EVIDENCE, 0.0)
-        call = self.tools.call("measure_metric", {"unit": check.unit, "evidence": evidence})
+        call = gateway.call("measure_metric", {"unit": check.unit, "evidence": evidence})
         measurement = call.result if call.ok else None
         if measurement is None:
             return SupportLink(claim.id, [], Verdict.INSUFFICIENT_EVIDENCE, 0.0)

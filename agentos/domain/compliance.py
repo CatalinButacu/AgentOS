@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
@@ -77,6 +77,7 @@ class Finding:
     groundedness_score: float
     supporting_span_ids: list[str]
     escalated_to_human: bool
+    tool_trace: list[dict] = field(default_factory=list)
 
 
 @dataclass

@@ -1,4 +1,5 @@
-from agentos.domain.compliance import ComplianceQuestion, Requirement
+from agentos.domain.compliance import (CheckOperator, ComplianceQuestion,
+                                       ExecutableCheck, Requirement)
 from agentos.domain.sources import Source, SourceKind
 from agentos.engine import build_engine
 from agentos.identity.principal import Principal
@@ -32,6 +33,19 @@ def test_rbac_changes_outcome():
     owner = _verdicts(build_engine().run(_question(), Principal("o", {Role.OWNER})))
     assert clerk["r1"] != "satisfied"
     assert owner["r1"] == "satisfied"
+
+
+def test_findings_carry_per_claim_tool_trace():
+    question = ComplianceQuestion(
+        "q", "",
+        [Requirement("r1", "Personal data is retained no longer than 24 months.",
+                     ExecutableCheck("retention", "months", CheckOperator.AT_MOST, 24))],
+        [Source("s1", SourceKind.PLAIN_TEXT, "samples/data_retention_policy.md")],
+    )
+    report = build_engine().run(question, Principal("o", {Role.OWNER}))
+    tools_used = [entry["tool"] for entry in report.findings[0].tool_trace]
+    assert "retrieve_evidence" in tools_used
+    assert "measure_metric" in tools_used
 
 
 def test_human_in_the_loop_resolves_escalation():

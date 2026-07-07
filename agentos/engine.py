@@ -127,11 +127,15 @@ class ComplianceEngine:
         return {"reviewed_findings": resolved}
 
     def _assess(self, claim: Claim, principal: Principal, claim_span) -> Finding:
-        candidate_span_ids = self.retriever.gather_evidence(claim, token_budget=self.config.token_budget)
+        gateway = ToolGateway()
+        self.retriever.register_tools(gateway)
+        self.sandbox.register_tools(gateway)
+
+        candidate_span_ids = self.retriever.gather_evidence(claim, self.config.token_budget, gateway)
         permitted_evidence = self.store.get_permitted(candidate_span_ids, principal)
 
         if claim.is_executable:
-            support = self.sandbox.execute_for_ground_truth(claim, permitted_evidence)
+            support = self.sandbox.execute_for_ground_truth(claim, permitted_evidence, gateway)
             groundedness_score = support.groundedness_score
         else:
             support = self.verifier.verify(claim, permitted_evidence)
@@ -139,6 +143,7 @@ class ComplianceEngine:
 
         evidence_tokens = sum(len(span.text.split()) for span in permitted_evidence)
         escalated = self.policy.requires_human_review(groundedness_score)
+        tool_trace = [{"tool": call.name, "ok": call.ok} for call in gateway.calls]
 
         claim_span.set("retrieved", len(candidate_span_ids))
         claim_span.set("permitted", len(permitted_evidence))
@@ -146,6 +151,7 @@ class ComplianceEngine:
         claim_span.set("verdict", support.verdict.value)
         claim_span.set("groundedness", groundedness_score)
         claim_span.set("escalated", escalated)
+        claim_span.set("tool.calls", len(tool_trace))
 
         self.evidence_graph.record_support(support)
         return Finding(
@@ -155,6 +161,7 @@ class ComplianceEngine:
             groundedness_score=groundedness_score,
             supporting_span_ids=support.evidence_span_ids,
             escalated_to_human=escalated,
+            tool_trace=tool_trace,
         )
 
     def run(self, question: ComplianceQuestion, principal: Principal,
