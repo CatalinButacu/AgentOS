@@ -2,6 +2,7 @@
 __pycache__/
 .git/
 .github/
+infra/
 tests/
 docs/
 *.db
