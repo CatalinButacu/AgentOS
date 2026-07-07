@@ -6,3 +6,10 @@ tests/
 docs/
 *.db
 .claude/
+.understand-anything/
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+secrets.json
