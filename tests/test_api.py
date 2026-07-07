@@ -64,3 +64,28 @@ def test_range_check_accepted():
     response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=_range_check(24))
     assert response.status_code == 200
     assert "r1" in {finding["requirement_id"] for finding in response.json()["findings"]}
+
+
+def test_policy_enables_custom_role():
+    request = dict(_REQUEST,
+                   principal={"id": "a", "roles": ["auditor"]},
+                   policy={"role_clearances": {"auditor": "restricted"}})
+    response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=request)
+    assert response.status_code == 200
+    assert _verdicts(response)["r1"] == "satisfied"
+
+
+def test_policy_role_not_in_clearances_is_rejected():
+    request = dict(_REQUEST,
+                   principal={"id": "a", "roles": ["auditor"]},
+                   policy={"role_clearances": {"reviewer": "restricted"}})
+    response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=request)
+    assert response.status_code == 400
+
+
+def test_policy_rejects_unknown_sensitivity():
+    request = dict(_REQUEST,
+                   principal={"id": "a", "roles": ["auditor"]},
+                   policy={"role_clearances": {"auditor": "top_secret"}})
+    response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=request)
+    assert response.status_code == 400

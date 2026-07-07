@@ -6,13 +6,13 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
+from agentos.config import ComplianceConfig
 from agentos.domain.compliance import (RANGE_OPERATORS, CheckOperator,
                                        ComplianceQuestion, ComplianceReport,
                                        ExecutableCheck, Requirement)
-from agentos.domain.sources import Source, SourceKind
+from agentos.domain.sources import Sensitivity, Source, SourceKind
 from agentos.engine import build_engine
 from agentos.identity.principal import Principal
-from agentos.identity.roles import Role
 from agentos.persistence.kv import SqliteStore
 
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -44,12 +44,20 @@ class PrincipalModel(BaseModel):
     tenant_id: str | None = None
 
 
+class PolicyModel(BaseModel):
+    role_clearances: dict[str, str] | None = None
+    groundedness_threshold: float | None = None
+    support_threshold: float | None = None
+    token_budget: int | None = None
+
+
 class ComplianceRequest(BaseModel):
     question_id: str
     text: str = ""
     requirements: list[RequirementModel]
     sources: list[SourceModel]
     principal: PrincipalModel
+    policy: PolicyModel | None = None
 
 
 class FindingModel(BaseModel):
@@ -77,6 +85,25 @@ def _request_backend():
     return SqliteStore(path) if path else None
 
 
+def _to_config(model: PolicyModel | None) -> ComplianceConfig:
+    if model is None:
+        return ComplianceConfig()
+    overrides = {}
+    if model.role_clearances is not None:
+        try:
+            overrides["role_clearances"] = {
+                role: Sensitivity(value) for role, value in model.role_clearances.items()}
+        except ValueError:
+            raise HTTPException(status_code=400, detail="unknown sensitivity in role clearances")
+    if model.groundedness_threshold is not None:
+        overrides["groundedness_threshold"] = model.groundedness_threshold
+    if model.support_threshold is not None:
+        overrides["support_threshold"] = model.support_threshold
+    if model.token_budget is not None:
+        overrides["token_budget"] = model.token_budget
+    return ComplianceConfig(**overrides)
+
+
 def _to_requirement(model: RequirementModel) -> Requirement:
     check = None
     if model.check is not None:
@@ -100,12 +127,12 @@ def _to_question(request: ComplianceRequest) -> ComplianceQuestion:
     return ComplianceQuestion(request.question_id, request.text, requirements, sources)
 
 
-def _to_principal(model: PrincipalModel) -> Principal:
-    try:
-        roles = {Role(role) for role in model.roles}
-    except ValueError:
-        raise HTTPException(status_code=400, detail="unknown role")
-    return Principal(model.id, roles, model.tenant_id)
+def _to_principal(model: PrincipalModel, config: ComplianceConfig) -> Principal:
+    known_roles = set(config.role_clearances)
+    unknown = [role for role in model.roles if role not in known_roles]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown role: {unknown[0]}")
+    return Principal(model.id, set(model.roles), model.tenant_id)
 
 
 def _to_response(report: ComplianceReport) -> ComplianceResponse:
@@ -132,6 +159,7 @@ def health() -> dict:
 @app.post("/compliance/check", response_model=ComplianceResponse)
 def check_compliance(request: ComplianceRequest,
                      _: None = Depends(require_api_key)) -> ComplianceResponse:
-    report = build_engine(backend=_request_backend()).run(
-        _to_question(request), _to_principal(request.principal))
+    config = _to_config(request.policy)
+    report = build_engine(backend=_request_backend(), config=config).run(
+        _to_question(request), _to_principal(request.principal, config))
     return _to_response(report)
