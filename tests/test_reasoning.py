@@ -57,6 +57,36 @@ def test_sandbox_evaluates_numeric_rule():
     assert sandbox.execute_for_ground_truth(failing, evidence).verdict == Verdict.NOT_SATISFIED
 
 
+def test_sandbox_evaluates_range():
+    sandbox = SandboxExecutorAgent(*_agent_args())
+    evidence = _spans("Personal data is retained for 18 months.")
+    inside = Claim("c", "r", "retention", True,
+                   ExecutableCheck("retention", "months", CheckOperator.BETWEEN, 12, 24))
+    outside = Claim("c", "r", "retention", True,
+                    ExecutableCheck("retention", "months", CheckOperator.BETWEEN, 20, 24))
+    assert sandbox.execute_for_ground_truth(inside, evidence).verdict == Verdict.SATISFIED
+    assert sandbox.execute_for_ground_truth(outside, evidence).verdict == Verdict.NOT_SATISFIED
+
+
+def test_sandbox_new_comparators():
+    sandbox = SandboxExecutorAgent(*_agent_args())
+    evidence = _spans("Personal data is retained for 24 months.")
+    greater = Claim("c", "r", "retention", True,
+                    ExecutableCheck("retention", "months", CheckOperator.GREATER_THAN, 12))
+    not_equals = Claim("c", "r", "retention", True,
+                       ExecutableCheck("retention", "months", CheckOperator.NOT_EQUALS, 24))
+    assert sandbox.execute_for_ground_truth(greater, evidence).verdict == Verdict.SATISFIED
+    assert sandbox.execute_for_ground_truth(not_equals, evidence).verdict == Verdict.NOT_SATISFIED
+
+
+def test_sandbox_range_without_upper_is_undecidable():
+    sandbox = SandboxExecutorAgent(*_agent_args())
+    evidence = _spans("Personal data is retained for 18 months.")
+    malformed = Claim("c", "r", "retention", True,
+                      ExecutableCheck("retention", "months", CheckOperator.BETWEEN, 12))
+    assert sandbox.execute_for_ground_truth(malformed, evidence).verdict == Verdict.INSUFFICIENT_EVIDENCE
+
+
 def test_verifier_uses_llm_when_live():
     evidence = _spans("Personal data retained for 24 months.")
     span_id = evidence[0].id

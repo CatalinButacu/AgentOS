@@ -6,9 +6,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-from agentos.domain.compliance import (CheckOperator, ComplianceQuestion,
-                                       ComplianceReport, ExecutableCheck,
-                                       Requirement)
+from agentos.domain.compliance import (RANGE_OPERATORS, CheckOperator,
+                                       ComplianceQuestion, ComplianceReport,
+                                       ExecutableCheck, Requirement)
 from agentos.domain.sources import Source, SourceKind
 from agentos.engine import build_engine
 from agentos.identity.principal import Principal
@@ -23,6 +23,7 @@ class ExecutableCheckModel(BaseModel):
     unit: str
     operator: str
     threshold: float
+    upper: float | None = None
 
 
 class RequirementModel(BaseModel):
@@ -83,7 +84,10 @@ def _to_requirement(model: RequirementModel) -> Requirement:
             operator = CheckOperator(model.check.operator)
         except ValueError:
             raise HTTPException(status_code=400, detail="unknown check operator")
-        check = ExecutableCheck(model.check.metric, model.check.unit, operator, model.check.threshold)
+        if operator in RANGE_OPERATORS and model.check.upper is None:
+            raise HTTPException(status_code=400, detail="range check requires an upper bound")
+        check = ExecutableCheck(model.check.metric, model.check.unit, operator,
+                                model.check.threshold, model.check.upper)
     return Requirement(model.id, model.text, check)
 
 

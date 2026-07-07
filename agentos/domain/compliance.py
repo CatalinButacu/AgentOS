@@ -18,6 +18,14 @@ class CheckOperator(Enum):
     AT_MOST = "at_most"
     AT_LEAST = "at_least"
     EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    LESS_THAN = "less_than"
+    GREATER_THAN = "greater_than"
+    BETWEEN = "between"
+    OUTSIDE = "outside"
+
+
+RANGE_OPERATORS = frozenset({CheckOperator.BETWEEN, CheckOperator.OUTSIDE})
 
 
 @dataclass
@@ -26,6 +34,7 @@ class ExecutableCheck:
     unit: str
     operator: CheckOperator
     threshold: float
+    upper: float | None = None
 
 
 @dataclass

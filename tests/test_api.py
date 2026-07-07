@@ -46,3 +46,21 @@ def test_rejects_unknown_role():
     bad_request = dict(_REQUEST, principal={"id": "x", "roles": ["wizard"]})
     response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=bad_request)
     assert response.status_code == 400
+
+
+def _range_check(upper):
+    check = {"metric": "retention", "unit": "months", "operator": "between", "threshold": 12}
+    if upper is not None:
+        check["upper"] = upper
+    return dict(_REQUEST, requirements=[{"id": "r1", "text": "retention", "check": check}])
+
+
+def test_range_check_requires_upper():
+    response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=_range_check(None))
+    assert response.status_code == 400
+
+
+def test_range_check_accepted():
+    response = client.post("/compliance/check", headers={"X-API-Key": "dev-key"}, json=_range_check(24))
+    assert response.status_code == 200
+    assert "r1" in {finding["requirement_id"] for finding in response.json()["findings"]}
