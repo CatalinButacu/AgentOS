@@ -189,11 +189,12 @@ class ComplianceEngine:
 def build_engine(retriever_factory=None,
                  human_decider: Callable[[dict], dict] | None = None,
                  backend=None,
-                 config: ComplianceConfig | None = None) -> ComplianceEngine:
+                 config: ComplianceConfig | None = None,
+                 settings=None) -> ComplianceEngine:
     config = config or ComplianceConfig()
-    models = ModelRouter()
+    models = ModelRouter.from_settings(settings) if settings is not None else ModelRouter()
     tools = ToolGateway()
-    encryption = EncryptionService()
+    encryption = EncryptionService.from_settings(settings) if settings is not None else EncryptionService()
     access_policy = AccessPolicy(config.role_clearances, config.sensitivity_rank)
     policy = PolicyGuard(access_policy, config.groundedness_threshold)
     store = SecureEvidenceStore(encryption, policy, backend=backend)

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
@@ -14,8 +12,10 @@ from agentos.domain.sources import Sensitivity, Source, SourceKind
 from agentos.engine import build_engine
 from agentos.identity.principal import Principal
 from agentos.persistence.kv import SqliteStore
+from agentos.settings import Settings
 
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+settings = Settings.from_env()
 
 
 class ExecutableCheckModel(BaseModel):
@@ -76,14 +76,12 @@ class ComplianceResponse(BaseModel):
 
 
 def require_api_key(provided: str | None = Depends(_API_KEY_HEADER)) -> None:
-    expected = os.environ.get("AGENTOS_API_KEY", "dev-key")
-    if provided != expected:
+    if provided != settings.api_key:
         raise HTTPException(status_code=401, detail="invalid api key")
 
 
 def _request_backend():
-    path = os.environ.get("AGENTOS_DB_PATH")
-    return SqliteStore(path) if path else None
+    return SqliteStore(settings.db_path) if settings.db_path else None
 
 
 def _to_config(model: PolicyModel | None) -> ComplianceConfig:
@@ -162,6 +160,6 @@ def health() -> dict:
 def check_compliance(request: ComplianceRequest,
                      _: None = Depends(require_api_key)) -> ComplianceResponse:
     config = _to_config(request.policy)
-    report = build_engine(backend=_request_backend(), config=config).run(
+    report = build_engine(backend=_request_backend(), config=config, settings=settings).run(
         _to_question(request), _to_principal(request.principal, config))
     return _to_response(report)

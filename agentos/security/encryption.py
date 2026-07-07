@@ -17,8 +17,14 @@ class EncryptionService:
 
     @classmethod
     def from_env(cls) -> "EncryptionService":
-        raw = os.environ.get("AGENTOS_ENCRYPTION_KEY")
-        return cls(base64.b64decode(raw)) if raw else cls()
+        from agentos.settings import Settings
+        return cls.from_settings(Settings.from_env())
+
+    @classmethod
+    def from_settings(cls, settings) -> "EncryptionService":
+        if settings.encryption_key:
+            return cls(base64.b64decode(settings.encryption_key))
+        return cls()
 
     @classmethod
     def from_key_vault(cls, vault_url: str, secret_name: str) -> "EncryptionService":

@@ -33,10 +33,16 @@ class ModelRouter:
 
     @classmethod
     def from_env(cls) -> "ModelRouter":
-        return cls(endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-                   api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-                   chat_deployment=os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT"),
-                   embedding_deployment=os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"))
+        from agentos.settings import Settings
+        return cls.from_settings(Settings.from_env())
+
+    @classmethod
+    def from_settings(cls, settings) -> "ModelRouter":
+        return cls(endpoint=settings.azure_openai_endpoint,
+                   api_key=settings.azure_openai_api_key,
+                   api_version=settings.azure_openai_api_version,
+                   chat_deployment=settings.azure_openai_chat_deployment,
+                   embedding_deployment=settings.azure_openai_embedding_deployment)
 
     @property
     def is_live(self) -> bool:
