@@ -23,6 +23,7 @@ from agentos.domain.sources import Source, SourceKind
 from agentos.identity.access import AccessPolicy
 from agentos.identity.principal import Principal
 from agentos.identity.roles import Role
+from agentos.infra.azure_monitor_exporter import AzureMonitorExporter
 from agentos.infra.langfuse_exporter import LangfuseExporter
 from agentos.infra.model_router import ModelRouter
 from agentos.infra.observability import Observability
@@ -244,3 +245,5 @@ if __name__ == "__main__":
           f"evidence_tokens={int(telemetry.sum_attribute('evidence.tokens'))}")
     trace_id = LangfuseExporter.from_env().export(telemetry)
     print(f"langfuse: {'trace ' + trace_id if trace_id else 'not configured (offline)'}")
+    exported = AzureMonitorExporter.from_env().export(telemetry)
+    print(f"app insights: {str(exported) + ' spans' if exported else 'not configured (offline)'}")

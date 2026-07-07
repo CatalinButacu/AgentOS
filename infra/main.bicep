@@ -116,6 +116,16 @@ resource docIntel 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${namePrefix}-appi-${suffix}'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logs.id
+  }
+}
+
 resource apiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
   name: 'agentos-api-key'
@@ -226,6 +236,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT', value: docIntel.properties.endpoint }
             { name: 'AZURE_DOCUMENT_INTELLIGENCE_KEY', secretRef: 'azure-document-intelligence-key' }
             { name: 'AZURE_KEY_VAULT_URL', value: keyVault.properties.vaultUri }
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
           ]
           probes: [
             {

@@ -21,6 +21,7 @@ class Settings:
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
+    app_insights_connection_string: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -44,4 +45,5 @@ class Settings:
             langfuse_public_key=value("LANGFUSE_PUBLIC_KEY"),
             langfuse_secret_key=value("LANGFUSE_SECRET_KEY"),
             langfuse_host=value("LANGFUSE_HOST"),
+            app_insights_connection_string=value("APPLICATIONINSIGHTS_CONNECTION_STRING"),
         )
